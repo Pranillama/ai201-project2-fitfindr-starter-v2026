@@ -59,24 +59,31 @@
 
 ### `search_listings`
 
-- **What it does:**
-- **Inputs:** <!-- name and type each: `max_price` (float), not "a price" -->
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Filters the 40 listings in `data/listings.json` (loaded with `utils/data_loader.load_listings`) by price and size, then ranks what is left by how many description keywords appear in each listing's `title`, `description`, `style_tags`, `category`, and `colors`.
+- **Inputs:**
+  - `description` (str): keywords such as `"vintage graphic tee"`. Matched case-insensitively, with filler words (`under`, `size`, `in`, `a`, `the`, ...) dropped.
+  - `size` (str or None): `None` skips size filtering. Otherwise the asked size and the listing's `size` are each split into pieces on spaces, `/`, and parentheses, and the listing matches when every piece of the asked size appears among the listing's pieces, case-insensitively. So `"M"` matches `M`, `S/M`, `M/L`; `"S"` does not match `US 9`; `"8"` and `"US 8"` match `US 8` but not `US 8.5`; `"W30"` matches `W30 L30`. Any listing whose size starts with `One Size` matches every size.
+  - `max_price` (float or None): `None` skips price filtering. Otherwise keeps listings with `price <= max_price`.
+- **Returns:** A `list[dict]` of at most `config.SEARCH_RESULT_LIMIT` (10) listing dicts, highest keyword score first, ties kept in data-file order. Each dict is the full listing, unchanged: `id`, `title`, `description`, `category`, `style_tags` (list), `size`, `condition`, `price` (float), `colors` (list), `brand` (str or None), `platform`. Listings with a keyword score of zero are dropped.
+- **When it has nothing:** Returns an empty list `[]`. Never `None`, never raises.
 
 ### `suggest_outfit`
 
-- **What it does:**
+- **What it does:** Asks the model (through `generate()`) for one or two outfits built around the new item, using pieces the user already owns.
 - **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+  - `new_item` (dict): one listing dict, as returned by `search_listings`.
+  - `wardrobe` (dict): `{"items": [...]}`, where each item has `id`, `name`, `category`, `colors` (list), `style_tags` (list), `notes`.
+- **Returns:** A non-empty `str` with one or two outfit suggestions that name wardrobe pieces by their `name`.
+- **When it has nothing:** If `wardrobe["items"]` is empty (`{"items": []}`), it still calls the model, asks for general styling advice for the item instead, and returns that as a non-empty `str`. It never returns `""` and never raises for an empty wardrobe.
 
 ### `create_fit_card`
 
-- **What it does:**
+- **What it does:** Asks the model (through `generate()`) for a short caption someone would actually post about the find.
 - **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+  - `outfit` (str): the suggestion returned by `suggest_outfit`.
+  - `new_item` (dict): the same listing dict that went into `suggest_outfit`.
+- **Returns:** A `str` caption of two to four sentences that mentions the item's `title`, `price`, and `platform` once each and is specific about the vibe. `brand` goes into the prompt only when it is not `None`.
+- **When it has nothing:** If `outfit` is empty or only whitespace, it does not call the model and returns a message string starting with `No fit card:` that says the outfit suggestion was missing. It never raises.
 
 ---
 
@@ -93,7 +100,7 @@
      The grader checks your code against what you claim here, so the file and
      function have to be real. -->
 
-**Branch rule:**
+**Branch rule:** If `search_listings` returns an empty list, put a message in `session["error"]` that repeats the description, size, and price ceiling that were searched and suggests which one to loosen, then return the session without calling `suggest_outfit` or `create_fit_card` (so `session["fit_card"]` stays `None`). Otherwise, put the first result in `session["selected_item"]` and go to `suggest_outfit`.
 
 **Where it lives:** `agent.py::run_agent`
 
