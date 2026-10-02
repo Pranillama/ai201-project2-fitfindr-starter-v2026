@@ -41,6 +41,8 @@
 
 <!-- Three or four sentences: what a user asks for, and what they get back. -->
 
+A user asks for a thrift find in plain words, like `python app.py ask 'vintage graphic tee under $30'`, optionally with a size (`size M`) and a price ceiling. FitFindr pulls the description, size, and budget out of the query, searches 40 listings from Depop, ThredUp, and Poshmark, and picks the best match. It then suggests one or two outfits built from clothes the user already owns (or general styling advice if their wardrobe is empty) and writes a short caption they could post about the find. If nothing matches, it stops before calling the model and says which part of the search to change, such as raising the budget or dropping the size.
+
 
 
 ---
@@ -167,17 +169,17 @@ Scored these Vintage Levi's 501 Jeans — Medium Wash on depop for only $38 and 
      "I gave Claude my search_listings spec. It returned None on no match
      instead of an empty list, so I changed it" is the level we want. -->
 
-**Moment 1**
+**Moment 1: attacking my acceptance criteria (Milestone 3)**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* I wrote criteria 3, 4, and 5 myself, then gave all five to Claude and asked it to say exactly how it would test each one using only the sentence, without rewriting them.
+- *What came back:* Criteria 3 and 5 could be tested as written, but criterion 4 (the fit card) could not. All 40 listing titles contain an em dash that the model might rewrite as a hyphen or drop along with the subtitle, a price like `$25.00` breaks a naive sentence count, and "mentions the platform exactly once" didn't say whether `on Depop` plus `#depop` counts as two mentions. It also pointed out that criteria 1 and 2 still had no reasons under them.
+- *What I changed:* I added explicit scoring rules to criterion 4: titles compare case-insensitively with any dash treated as a hyphen but the subtitle required, platform mentions count hashtags, only `$N` or `$N.00` counts as a price and the card must contain exactly one dollar amount, and sentences are counted after removing hashtags without splitting on a period between digits. I also wrote the reasons for criteria 1 and 2.
 
-**Moment 2**
+**Moment 2: the fit card's voice (Milestone 4)**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* I had Claude build `create_fit_card` from my Tool Inventory spec and run it three times on the Levi's 501s with the cache off (`AI201_CACHE=0`), to check that the captions varied.
+- *What came back:* The three captions were worded differently and each mentioned the title, `$38`, and `depop` once, but all three were written from the seller's point of view: "Grab them on my depop before I change my mind and keep them."
+- *What I changed:* FitFindr's user is the shopper who found the item, not the person selling it, so I added a line to the system prompt in `tools.py` saying the poster is the shopper showing off how they styled the find, not the seller. The re-run captions read like a buyer's post: "Scored these Vintage Levi's 501 Jeans — Medium Wash on depop for only $38..."
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
