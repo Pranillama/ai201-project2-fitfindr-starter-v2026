@@ -25,9 +25,11 @@ Given a query that matches at least one listing, the agent completes all three
 tool calls and returns a fit card — in at least 4 of 5 tries.
 
 **Why this target:**
-<!-- Why 4 of 5 and not 5 of 5? Something about your search, probably —
-     "my search is a plain keyword match and some phrasings will miss" is a
-     real answer. -->
+The successful path depends on two model calls, one for the outfit and one
+for the fit card. I chose 4 of 5 rather than 5 of 5 because a model call can
+fail or return an empty response even when search finds a listing. One miss
+still needs a diagnosis; more than one means the full flow is not reliable
+enough for my target.
 
 ---
 
@@ -37,12 +39,14 @@ Given a query that matches no listings, the agent stops before calling
 `suggest_outfit` and returns a message naming what to change — 5 of 5 tries.
 
 **Why this target:**
-<!-- Why is 5 of 5 reasonable here when criterion 1 isn't? What's different
-     about this path? -->
+My search specification returns `[]` when nothing matches, and the loop can
+check that result before either model call. This path depends on a fixed
+branch rule, so I expect 5 of 5. There is no stricter success rate, and a
+lower target would allow the agent to generate an outfit without an item.
 
 ---
 
-## 3. Something about state
+## 3. The selected item reaches the outfit tool unchanged
 
 <!-- YOU WRITE THIS ONE.
 
@@ -53,16 +57,22 @@ Given a query that matches no listings, the agent stops before calling
      look like state failure — it looks like a tool problem. Something that
      compares session["selected_item"] against what actually reached
      suggest_outfit is the shape you're after. -->
-
-
+For a query that matches at least one listing, the first listing in
+`session["search_results"]`, `session["selected_item"]`, and the actual
+`new_item` argument received by `suggest_outfit` have the same `id` and equal
+values for every listing field, in 5 of 5 tries. A missing tool call counts
+as a failure. Check the captured tool input against the session, rather than
+guessing from the outfit's wording.
 
 **Why this target:**
-
-
+The loop only needs to store one listing and pass it to the next tool. That
+handoff does not depend on the model's wording, so I expect it to work in all
+five tries. There is no stricter success rate than 5 of 5; accepting fewer
+would allow the agent to style an item the user did not select.
 
 ---
 
-## 4. Something about the fit card
+## 4. The fit card is short and includes the listing facts
 
 <!-- YOU WRITE THIS ONE.
 
@@ -74,16 +84,42 @@ Given a query that matches no listings, the agent stops before calling
      mentions the price? Two different items producing the same opening
      sentence? A card longer than a caption anyone would post? Any of those can
      be turned into a number. -->
+Run the same matching query five times with caching off. In at least 4 of
+5 tries, the returned fit card has 2 to 4 sentences and mentions the selected
+item's full title, correct price, and platform exactly once each. A missing
+card fails. Use these rules to score every card:
 
-
+- For the title, compare case-insensitively, collapse repeated whitespace,
+  and treat all dash characters as a plain hyphen. All words on both sides
+  of the title's dash must remain in the same order. Changing the dash is
+  allowed; dropping the subtitle is a failure. Count complete title matches
+  in the entire card.
+- For the platform, count case-insensitive whole-word matches in the entire
+  card, including hashtags. `ThredUp` and `thredUp` match. `on Depop` plus
+  `#depop` counts as two mentions and fails.
+- For the price, accept only a dollar sign immediately followed by the
+  listing's numeric price, either with exactly two decimal places or, for
+  a whole-dollar price, with no decimal places. For a price of 24, only
+  `$24` and `$24.00` qualify; `24 bucks` does not. The card must contain
+  exactly one dollar amount, and it must match the listing's price.
+- For sentence counting, first remove hashtags. Split at `.`, `!`, or `?`,
+  treating consecutive punctuation as one separator and ignoring a period
+  between two digits. Count each resulting segment that contains at least
+  one letter or digit, including a final segment with no closing punctuation.
+  Emoji-only segments do not count, and line breaks do not split sentences.
+  These are the counting rules for this test, including abbreviations.
 
 **Why this target:**
-
-
+My tool specification asks for a short caption with these three listing
+facts, so this checks whether the card is useful without requiring a fixed
+script. Dash style and capitalization do not change the listing facts, so
+I allow those differences. I chose 4 of 5 rather than 5 of 5 because the model can occasionally
+repeat a fact or miss the sentence limit even with the same input. Those
+misses should still be recorded and investigated.
 
 ---
 
-## 5. Your choice
+## 5. The search respects my budget
 
 <!-- YOU WRITE THIS ONE TOO.
 
@@ -91,12 +127,18 @@ Given a query that matches no listings, the agent stops before calling
      wardrobe path, what happens when the model can't be reached, whether the
      search respects a price ceiling — anything, as long as it names a number
      or an observable outcome. -->
-
-
+For `vintage graphic tee under $30`, the agent records
+`session["parsed"]["max_price"]` as 30, returns at least one search result,
+and every returned listing plus `session["selected_item"]` has a price of
+$30 or less, in 5 of 5 tries. An empty result or missing selected item fails,
+so returning nothing cannot pass the budget check.
 
 **Why this target:**
-
-
+I care about getting recommendations I can afford. The listings already have
+numeric prices, and my search specification uses an inclusive price ceiling,
+so this is a direct comparison rather than a model judgment. I chose 5 of 5
+because there is no stricter success rate, and allowing one over-budget
+result would break the limit I explicitly asked for.
 
 ---
 
