@@ -104,9 +104,9 @@
 
 **Where it lives:** `agent.py::run_agent`
 
-**How the query is parsed:** <!-- regex, string splitting, or asking the model — say which -->
+**How the query is parsed:** Regex, in `agent.py::parse_query`. A price ceiling (`under $30`, `below 30`, `up to $30`, `max $30`, or a bare `$30`) becomes `max_price` (float). `size` followed by a size (`size M`, `in size S/M`, `size 8.5`, `size US 8`) becomes `size` (str, uppercased). Both matches are cut out of the query, punctuation is removed, and what is left becomes `description`. Anything not found is `None`. No model call.
 
-**What moves through the session:** <!-- which fields, in what order -->
+**What moves through the session:** In order: `query` → `parsed` (`description`, `size`, `max_price`) → `search_results` (the list from `search_listings`) → `selected_item` (`search_results[0]`) → `outfit_suggestion` (from `suggest_outfit(selected_item, wardrobe)`) → `fit_card` (from `create_fit_card(outfit_suggestion, selected_item)`). Each tool reads its inputs back out of the session, not from the previous call. On the empty branch, `error` is set and `selected_item`, `outfit_suggestion`, and `fit_card` stay `None`.
 
 ---
 
@@ -120,8 +120,19 @@
 **One full query**
 
 ```
-$ python app.py ask '...'
+$ python app.py ask 'vintage graphic tee under $30'
 
+  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+
+  Outfit:   Outfit 1
+Pair the Y2K Baby Tee with the baggy straight-leg jeans, vintage black denim jacket, and chunky white sneakers. Add the black crossbody bag for an effortless everyday streetwear look that balances the fitted crop top with relaxed denim.
+
+Outfit 2
+Style the Y2K Baby Tee with the wide-leg khaki trousers, black combat boots, and the black cropped zip hoodie worn unzipped. Finish with the brown leather belt to tie the earth tones and grunge elements together.
+
+  Fit card: Scored this Y2K Baby Tee — Butterfly Print for just $18 over on depop and I'm obsessed. I've been wearing it non-stop, either with baggy jeans and chunky sneakers for casual streetwear days, or toughened up with wide-leg trousers and combat boots. It's the ultimate little crop top to throw on when you want to look put together with zero effort.
+
+2 model calls this session, 766 prompt + 183 output tokens
 ```
 
 **The three tools, tested one at a time**

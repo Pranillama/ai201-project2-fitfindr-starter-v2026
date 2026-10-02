@@ -50,7 +50,7 @@ def _searchable_words(listing: dict) -> set[str]:
     return set(_words(text))
 
 
-def _price_text(price: float) -> str:
+def format_price(price: float) -> str:
     return f"${price:.0f}" if price == int(price) else f"${price:.2f}"
 
 
@@ -63,7 +63,7 @@ def _describe_item(item: dict) -> str:
         f"Colors: {', '.join(item['colors'])}",
         f"Size: {item['size']}",
         f"Condition: {item['condition']}",
-        f"Price: {_price_text(item['price'])}",
+        f"Price: {format_price(item['price'])}",
         f"Platform: {item['platform']}",
     ]
     if item.get("brand"):
@@ -205,7 +205,7 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
             "nothing to write a caption about."
         )
 
-    price = _price_text(new_item["price"])
+    price = format_price(new_item["price"])
     prompt = (
         "Write a caption for a post about this thrift find.\n\n"
         f"{_describe_item(new_item)}\n\n"
