@@ -260,24 +260,45 @@ that produced it:
      the same length, your branch isn't working — and this is the fastest way
      anyone will ever find that out. -->
 
-**Happy path**
+**Happy path** (`AI201_CACHE=0 python app.py ask 'vintage graphic tee under $30' --trace`, two real model calls)
 
 ```
-
+[1] parse_query
+      in:  'vintage graphic tee under $30'
+      out: description='vintage graphic tee', size=None, max_price=30.0
+[2] search_listings (via MCP)
+      in:  {'description': 'vintage graphic tee', 'size': None, 'max_price': 30.0}
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+      →    branch: results found, selected the first one
+[3] suggest_outfit
+      in:  new_item=lst_002: Y2K Baby Tee — Butterfly Print ($18.0, depop), wardrobe=10 items
+      out: Outfit 1: Y2K Streetwear Pair the butterfly baby tee with the baggy straight-leg jeans, dark wash. Layer the b…
+[4] create_fit_card
+      in:  outfit='Outfit 1: Y2K Streetwear\nPair the butter'…, new_item=lst_002: Y2K Baby Tee — Butterfly Print ($18.0, …
+      out: Manifesting pure 2000s energy with this Y2K Baby Tee — Butterfly Print I scored on depop for just $18! I’m obs…
 ```
 
-**Empty search**
+**Empty search** (`python app.py ask 'designer ballgown size XXS under $5' --trace`)
 
 ```
-
+[1] parse_query
+      in:  'designer ballgown size XXS under $5'
+      out: description='designer ballgown', size='XXS', max_price=5.0
+[2] search_listings (via MCP)
+      in:  {'description': 'designer ballgown', 'size': 'XXS', 'max_price': 5.0}
+      out: [] (empty)
+      →    branch: empty, stopping before suggest_outfit
 ```
 
-**On the MCP move:** <!-- what changed in your code, and whether anything
-behaved differently afterwards. If the rewire didn't work, say exactly where it
-broke — the error text and the last thing that worked. That earns the point in
-full. -->
+The empty run is two steps and stops at the branch; the happy run is four. Step 2 is the MCP call: `agent.py::search_listings` calls `mcp_client.call_tool`, which starts `mcp_server.py` and asks it for `search_listings`.
 
+**On the MCP move:** I moved `search_listings` behind MCP. In `mcp_server.py` it is registered with `@mcp.tool()` (typed inputs `description: str`, `size: str | None`, `max_price: float | None`, and a description that names units and the empty case). In `agent.py`, `search_listings` is now a small wrapper that calls `mcp_client.call_tool("search_listings", {...})`, and both `run_agent` and `no_results_message` use it, so the tool is only reached through MCP. Nothing behaved differently: on three queries (6 results, 1 result, and an empty list) the MCP result was identical to the direct call, and the happy and impossible queries print the same text as before. The only visible change is speed, because each MCP call starts the server again.
 
+**Failure modes triggered on purpose**
+
+- Empty search (`python app.py ask 'designer ballgown size XXS under $5'`): already handled. It stops before `suggest_outfit` and says: "Nothing matched 'designer ballgown' in size XXS at $5 or less. No listing matches those words even without a size or price limit. Try naming the kind of item (tee, jacket, jeans, sneakers) or a style (vintage, y2k, streetwear)."
+- Empty wardrobe (`python app.py ask 'vintage graphic tee under $30' --empty-wardrobe`): already handled. It returned general styling advice for the item and a fit card, no crash and no empty string. A `--trace` run of it shows `wardrobe=0 items` at step 3.
+- Model unavailable (`GEMINI_API_KEY=not-a-real-key python app.py ask 'cropped leather jacket under $80'`, a query not asked before; I overrode the key for that one command instead of editing `.env`, which gives the same rejection and leaves the real key untouched). Before the fix, the failure escaped `run_agent` as a raised `ModelUnavailable` and `app.py` printed it as an exception line. After the fix, `run_agent` catches it, leaves `fit_card` as `None`, and puts this in `session["error"]`: "FitFindr couldn't reach the model, so it couldn't style the item or write a fit card. It did find Denim Jacket — Light Wash, Cropped, so your search is fine. The model rejected your API key. Check GEMINI_API_KEY in your .env file, or create a fresh key at aistudio.google.com."
 
 ---
 

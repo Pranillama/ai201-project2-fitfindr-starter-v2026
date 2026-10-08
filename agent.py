@@ -16,7 +16,7 @@ Build and test your three tools in `tools.py` first. Then come here.
 import re
 import trace
 
-from generate import ModelUnavailable  # noqa: F401 - the handler is unit 4
+from generate import ModelUnavailable
 from mcp_client import call_tool
 from tools import create_fit_card, format_price, suggest_outfit
 
@@ -60,6 +60,11 @@ def search_listings(description: str, size: str | None = None, max_price: float 
         "size": size,
         "max_price": max_price,
     })
+
+
+def _item_label(item: dict) -> str:
+    """One listing as 'id: title ($price, platform)' for the trace."""
+    return f"{item['id']}: {item['title']} (${item['price']}, {item['platform']})"
 
 
 # ── query parsing ─────────────────────────────────────────────────────────────
@@ -178,47 +183,84 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     call's return value.
 
     ─────────────────────────────────────────────────────────────────────────
-    IN UNIT 4 you come back and add two things:
-
-      • Trace calls. One per step. `trace.step("search_listings", inputs=...,
-        returned=...)` — see trace.py. Your README needs the output.
-
-      • A handler for ModelUnavailable, so a bad key produces a message rather
-        than a stack trace. The import is already at the top of this file.
+    Unit 4 added two things: one trace.step() call per step (see trace.py), and
+    a ModelUnavailable handler that turns a model that can't be reached into a
+    message in session["error"] instead of a stack trace.
     """
     session = new_session(query, wardrobe)
 
     next_step = "parse"
     iterations = 0
-    while next_step != "done":
-        iterations += 1
-        trace.check_iterations(iterations)
+    try:
+        while next_step != "done":
+            iterations += 1
+            trace.check_iterations(iterations)
 
-        if next_step == "parse":
-            session["parsed"] = parse_query(session["query"])
-            next_step = "search_listings"
+            if next_step == "parse":
+                session["parsed"] = parse_query(session["query"])
+                parsed = session["parsed"]
+                trace.step(
+                    "parse_query",
+                    inputs=repr(session["query"]),
+                    returned=(
+                        f"description={parsed['description']!r}, "
+                        f"size={parsed['size']!r}, max_price={parsed['max_price']!r}"
+                    ),
+                )
+                next_step = "search_listings"
 
-        elif next_step == "search_listings":
-            session["search_results"] = search_listings(**session["parsed"])
-            # The branch: nothing found means stop here, before any model call.
-            if not session["search_results"]:
-                session["error"] = no_results_message(session["parsed"])
+            elif next_step == "search_listings":
+                session["search_results"] = search_listings(**session["parsed"])
+                # The branch: nothing found means stop here, before any model call.
+                if not session["search_results"]:
+                    session["error"] = no_results_message(session["parsed"])
+                    note = "branch: empty, stopping before suggest_outfit"
+                    next_step = "done"
+                else:
+                    session["selected_item"] = session["search_results"][0]
+                    note = "branch: results found, selected the first one"
+                    next_step = "suggest_outfit"
+                trace.step(
+                    "search_listings (via MCP)",
+                    inputs=str(session["parsed"]),
+                    returned=session["search_results"],
+                    note=note,
+                )
+
+            elif next_step == "suggest_outfit":
+                item = session["selected_item"]
+                session["outfit_suggestion"] = suggest_outfit(item, session["wardrobe"])
+                trace.step(
+                    "suggest_outfit",
+                    inputs=(
+                        f"new_item={_item_label(item)}, "
+                        f"wardrobe={len(session['wardrobe']['items'])} items"
+                    ),
+                    returned=session["outfit_suggestion"],
+                )
+                next_step = "create_fit_card"
+
+            elif next_step == "create_fit_card":
+                item = session["selected_item"]
+                session["fit_card"] = create_fit_card(session["outfit_suggestion"], item)
+                trace.step(
+                    "create_fit_card",
+                    inputs=f"outfit={session['outfit_suggestion'][:40]!r}…, new_item={_item_label(item)}",
+                    returned=session["fit_card"],
+                )
                 next_step = "done"
-            else:
-                session["selected_item"] = session["search_results"][0]
-                next_step = "suggest_outfit"
 
-        elif next_step == "suggest_outfit":
-            session["outfit_suggestion"] = suggest_outfit(
-                session["selected_item"], session["wardrobe"]
-            )
-            next_step = "create_fit_card"
-
-        elif next_step == "create_fit_card":
-            session["fit_card"] = create_fit_card(
-                session["outfit_suggestion"], session["selected_item"]
-            )
-            next_step = "done"
+    except ModelUnavailable as exc:
+        # A model call (suggest_outfit or create_fit_card) could not reach the
+        # model. Stop with a message instead of a stack trace; the search
+        # already worked, so say so.
+        item = session["selected_item"]
+        found = f" It did find {item['title']}, so your search is fine." if item else ""
+        session["error"] = (
+            f"FitFindr couldn't reach the model, so it couldn't style the item "
+            f"or write a fit card.{found} {exc}"
+        )
+        trace.step("model unavailable", note="stopping, no fit card")
 
     return session
 
