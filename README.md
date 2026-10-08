@@ -201,17 +201,121 @@ Scored these Vintage Levi's 501 Jeans — Medium Wash on depop for only $38 and 
 
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. A matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. An impossible query stops before the second tool | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. The selected item reaches the outfit tool unchanged | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. The fit card is short and includes the listing facts | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. The search respects my budget | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
-**Real output from one try**, pasted as text, naming the file and function
-that produced it:
+How each try was scored: `python run_eval.py --label before` ran every scenario five times with caching off and wrote `results/run_2026-10-08_1840_before.md`, which holds each try's session summary, outfit, fit card and trace. Criteria 1, 2 and 4 were scored from that file. Criterion 1 needs all four trace steps (`parse_query`, `search_listings (via MCP)`, `suggest_outfit`, `create_fit_card`) and a non-empty fit card. Criterion 2 needs a two-step trace that never reaches `suggest_outfit`, `fit_card` left `None`, and a message that names what to change. Criterion 4 was scored with the exact rules in `criteria.md`: sentences counted after removing hashtags, then title, platform and price each counted once; the per-try counts are in the criterion 4 paragraph below. Criteria 3 and 5 need more than the run log records (the full dict that reached `suggest_outfit`, and the price of every result), so they were scored by the capture command at the end of this section, which runs `agent.py::run_agent` five times per criterion with caching off and `suggest_outfit` wrapped to record its argument.
+
+**Real output from one try** (try 1 of each criterion), pasted as text, naming the file and function that produced it:
+
+**Criterion 1** - `agent.py::run_agent` (scenario "matching query completes", query `vintage graphic tee under $30`). All four steps ran and a fit card came back:
 
 ```
+[1] parse_query
+      in:  'vintage graphic tee under $30'
+      out: description='vintage graphic tee', size=None, max_price=30.0
+[2] search_listings (via MCP)
+      in:  {'description': 'vintage graphic tee', 'size': None, 'max_price': 30.0}
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+      →    branch: results found, selected the first one
+[3] suggest_outfit
+      in:  new_item=lst_002: Y2K Baby Tee — Butterfly Print ($18.0, depop), wardrobe=10 items
+      out: Outfit 1 Pair the Y2K Baby Tee — Butterfly Print with baggy straight-leg jeans, dark wash. Layer the vintage b…
+[4] create_fit_card
+      in:  outfit='Outfit 1\nPair the Y2K Baby Tee — Butterf'…, new_item=lst_002: Y2K Baby Tee — Butterfly Print ($18.0, …
+      out: Scored this Y2K Baby Tee — Butterfly Print on depop for only $18 and I am obsessed. I've been living in it pai…
+```
 
+Fit card (`tools.py::create_fit_card`): Scored this Y2K Baby Tee — Butterfly Print on depop for only $18 and I am obsessed. I've been living in it paired with baggy dark wash jeans and a black denim jacket for that ultimate 2000s street style. Such a lucky find!
+
+**Criterion 2** - `agent.py::run_agent` and `agent.py::no_results_message` (query `designer ballgown size XXS under $5`). The trace stops at step 2 and `suggest_outfit` is never called:
+
+```
+[1] parse_query
+      in:  'designer ballgown size XXS under $5'
+      out: description='designer ballgown', size='XXS', max_price=5.0
+[2] search_listings (via MCP)
+      in:  {'description': 'designer ballgown', 'size': 'XXS', 'max_price': 5.0}
+      out: [] (empty)
+      →    branch: empty, stopping before suggest_outfit
+```
+
+Message returned in `session["error"]`: Nothing matched 'designer ballgown' in size XXS at $5 or less. No listing matches those words even without a size or price limit. Try naming the kind of item (tee, jacket, jeans, sneakers) or a style (vintage, y2k, streetwear).
+
+**Criterion 3** - capture command below (`agent.py::run_agent` with `suggest_outfit` wrapped), query `denim jacket under $50`, try 1:
+
+```
+CRITERION 3: query 'denim jacket under $50'
+  try 1: PASS  calls_to_suggest_outfit=1  id search_results[0]=lst_007 selected_item=lst_007 received=lst_007  all fields equal=True
+```
+
+**Criterion 4** - `tools.py::create_fit_card` (scenario "fit card is short and has the listing facts", same query as criterion 1, listing `lst_002`, Y2K Baby Tee - Butterfly Print, $18, depop). Try 1 fit card:
+
+```
+Scored this Y2K Baby Tee — Butterfly Print on depop for only $18 and I am obsessed. I threw it on with baggy dark wash jeans, an unzipped zip hoodie, and chunky sneakers for the ultimate cozy streetwear vibe. Such an easy little graphic tee to throw on and go!
+```
+
+Scored with the `criteria.md` rules, per try (sentences / title count / platform count / dollar amounts): try 1: 3 / 1 / 1 / ['$18']; try 2: 3 / 1 / 1 / ['$18']; try 3: 2 / 1 / 1 / ['$18']; try 4: 3 / 1 / 1 / ['$18']; try 5: 3 / 1 / 1 / ['$18']. All five tries are within 2 to 4 sentences with each fact exactly once.
+
+**Criterion 5** - capture command below, query `vintage graphic tee under $30`, try 1:
+
+```
+CRITERION 5: query 'vintage graphic tee under $30'
+  try 1: PASS  parsed max_price=30.0  results=10  max result price=30.0  selected price=18.0
+```
+
+**Capture command for criteria 3 and 5** (run from the repo root with the virtual environment active, for example `python - < capture.py`). Full output of all ten tries follows it:
+
+```python
+import config
+config.CACHE_ENABLED = False          # five real model answers, as in run_eval.py
+import agent
+from utils.data_loader import get_example_wardrobe
+
+received = []                         # what suggest_outfit actually got as new_item
+_real = agent.suggest_outfit
+agent.suggest_outfit = lambda item, wardrobe: (received.append(item), _real(item, wardrobe))[1]
+
+def tries(query):
+    for n in range(1, 6):
+        received.clear()
+        s = agent.run_agent(query, get_example_wardrobe())
+        yield n, s, list(received)
+
+print("CRITERION 3: query 'denim jacket under $50'")
+for n, s, got in tries("denim jacket under $50"):
+    first = s["search_results"][0] if s["search_results"] else None
+    ok = bool(got) and first is not None and first == s["selected_item"] == got[0]
+    print(f"  try {n}: {'PASS' if ok else 'FAIL'}  calls_to_suggest_outfit={len(got)}  "
+          f"id search_results[0]={first and first['id']} selected_item={s['selected_item'] and s['selected_item']['id']} "
+          f"received={got[0]['id'] if got else None}  all fields equal={ok}")
+
+print("CRITERION 5: query 'vintage graphic tee under $30'")
+for n, s, got in tries("vintage graphic tee under $30"):
+    prices = [r["price"] for r in s["search_results"]]
+    sel = s["selected_item"]
+    ok = (s["parsed"]["max_price"] == 30 and len(prices) >= 1 and sel is not None
+          and all(p <= 30 for p in prices) and sel["price"] <= 30)
+    print(f"  try {n}: {'PASS' if ok else 'FAIL'}  parsed max_price={s['parsed']['max_price']}  "
+          f"results={len(prices)}  max result price={max(prices) if prices else None}  selected price={sel and sel['price']}")
+```
+
+```
+CRITERION 3: query 'denim jacket under $50'
+  try 1: PASS  calls_to_suggest_outfit=1  id search_results[0]=lst_007 selected_item=lst_007 received=lst_007  all fields equal=True
+  try 2: PASS  calls_to_suggest_outfit=1  id search_results[0]=lst_007 selected_item=lst_007 received=lst_007  all fields equal=True
+  try 3: PASS  calls_to_suggest_outfit=1  id search_results[0]=lst_007 selected_item=lst_007 received=lst_007  all fields equal=True
+  try 4: PASS  calls_to_suggest_outfit=1  id search_results[0]=lst_007 selected_item=lst_007 received=lst_007  all fields equal=True
+  try 5: PASS  calls_to_suggest_outfit=1  id search_results[0]=lst_007 selected_item=lst_007 received=lst_007  all fields equal=True
+CRITERION 5: query 'vintage graphic tee under $30'
+  try 1: PASS  parsed max_price=30.0  results=10  max result price=30.0  selected price=18.0
+  try 2: PASS  parsed max_price=30.0  results=10  max result price=30.0  selected price=18.0
+  try 3: PASS  parsed max_price=30.0  results=10  max result price=30.0  selected price=18.0
+  try 4: PASS  parsed max_price=30.0  results=10  max result price=30.0  selected price=18.0
+  try 5: PASS  parsed max_price=30.0  results=10  max result price=30.0  selected price=18.0
 ```
 
 ---

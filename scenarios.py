@@ -22,11 +22,36 @@ SCENARIOS = [
         "criterion": 1,
     },
     {
-        # A query nothing can match. Criterion 2 — the branch.
+        # A query nothing can match. Criterion 2 - the branch.
         "name": "impossible query stops early",
         "query": "designer ballgown size XXS under $5",
         "wardrobe": "example",
         "criterion": 2,
+    },
+    {
+        # Criterion 3 - state. Any matching query works; what is scored is the
+        # item in the session against the item suggest_outfit received. A
+        # different query from criterion 1, so the handoff is not only tested on
+        # one item.
+        "name": "selected item reaches suggest_outfit",
+        "query": "denim jacket under $50",
+        "wardrobe": "example",
+        "criterion": 3,
+    },
+    {
+        # Criterion 4 - fit card. The same matching query run five times with
+        # caching off, as the criterion says.
+        "name": "fit card is short and has the listing facts",
+        "query": "vintage graphic tee under $30",
+        "wardrobe": "example",
+        "criterion": 4,
+    },
+    {
+        # Criterion 5 - budget. The exact query the criterion names.
+        "name": "search respects the budget",
+        "query": "vintage graphic tee under $30",
+        "wardrobe": "example",
+        "criterion": 5,
     },
     {
         # A user with nothing saved. One of unit 4's three failure modes.
@@ -35,18 +60,6 @@ SCENARIOS = [
         "wardrobe": "empty",
         "criterion": None,
     },
-    # TODO: add what your criteria 3, 4 and 5 need.
-    #
-    # Set "criterion" to the number in criteria.md that the scenario tests.
-    # "criterion": None means a diagnostic run — useful to have, but it isn't
-    # one of your five, and run_eval.py marks it as such in the table.
-    #
-    # For a state criterion, any normal query works — what you're checking is
-    # what ends up in the session, not what the user typed.
-    #
-    # For a fit-card criterion, you probably want the SAME query listed more
-    # than once, or several different items, depending on what your criterion
-    # actually says.
 ]
 
 WARDROBES = ("example", "empty")
