@@ -17,7 +17,8 @@ import re
 import trace
 
 from generate import ModelUnavailable  # noqa: F401 - the handler is unit 4
-from tools import create_fit_card, format_price, search_listings, suggest_outfit
+from mcp_client import call_tool
+from tools import create_fit_card, format_price, suggest_outfit
 
 # ── session state ─────────────────────────────────────────────────────────────
 
@@ -45,6 +46,20 @@ def new_session(query: str, wardrobe: dict) -> dict:
         "fit_card": None,            # what create_fit_card returned
         "error": None,               # set when the run ended early
     }
+
+
+# ── search over MCP ───────────────────────────────────────────────────────────
+
+def search_listings(description: str, size: str | None = None, max_price: float | None = None) -> list[dict]:
+    """
+    search_listings now lives behind MCP (mcp_server.py). Same inputs, same
+    list of listing dicts back; this is the only place the agent reaches it.
+    """
+    return call_tool("search_listings", {
+        "description": description,
+        "size": size,
+        "max_price": max_price,
+    })
 
 
 # ── query parsing ─────────────────────────────────────────────────────────────
