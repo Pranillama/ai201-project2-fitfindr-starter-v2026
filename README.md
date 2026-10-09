@@ -181,6 +181,18 @@ Scored these Vintage Levi's 501 Jeans — Medium Wash on depop for only $38 and 
 - *What came back:* The three captions were worded differently and each mentioned the title, `$38`, and `depop` once, but all three were written from the seller's point of view: "Grab them on my depop before I change my mind and keep them."
 - *What I changed:* FitFindr's user is the shopper who found the item, not the person selling it, so I added a line to the system prompt in `tools.py` saying the poster is the shopper showing off how they styled the find, not the seller. The re-run captions read like a buyer's post: "Scored these Vintage Levi's 501 Jeans — Medium Wash on depop for only $38..."
 
+**Moment 3: a failure I did not plan to trigger (Unit 4, Milestone 2 and 4)**
+
+- *What I asked for:* I had Claude trigger my three failure modes, add a handler where one crashed, and add the trace calls. For the bad key it set a fake `GEMINI_API_KEY` on the command line, so my real key in `.env` was never edited or printed.
+- *What came back:* The empty search and empty wardrobe already worked. The bad key escaped `run_agent` as a raised `ModelUnavailable`, so Claude added a handler that leaves `fit_card` as `None` and sets `session["error"]`. Later, two runs of `leather bomber under $20` hit a live `503 UNAVAILABLE` from the model, and my handler printed the provider's raw JSON error to the user.
+- *What I changed:* I chose to clean up the message instead of leaving it. `agent.py::run_agent` now replaces the catch-all text with "The model service is busy or temporarily down. Wait a minute and try again.", and the bad-key message keeps its own hint. I left `generate.py` alone, so a 503 is still not retried (see What's Still Broken).
+
+**Moment 4: scoring my criteria against the real runs (Unit 4, Milestones 3 to 5)**
+
+- *What I asked for:* I asked Claude to score my five criteria from the run logs using my own rules, and to find the weak spot behind any misses.
+- *What came back:* Criteria 1, 2 and 4 could be scored from the run log, but criterion 3 needs every field of the item that reached `suggest_outfit`, and the trace line only shows `id`, title, price and platform. Claude offered three options and I picked an inline capture command that wraps `suggest_outfit` and compares the full dict. Nothing was missed, so Claude pointed out that `leather bomber under $20` would pass criterion 1 while returning a $12 leather belt, because `search_listings` kept any listing with one matching keyword.
+- *What I changed:* I kept every verdict as MET, wrote that my targets were partly too low, and made the one improvement the search rule (a listing must match more than half of the keywords). I measured it with a probe on two queries, because my five criteria were already at 5 of 5 and could not show it.
+
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
      Don't fill these in during unit 3.
@@ -529,7 +541,18 @@ The empty-search messages after the change, in full: "Nothing matched 'leather b
      you did. "I ran out of time" is fine if it's true. Pretending nothing is
      left is not. -->
 
+No criterion is missed: all five are 5 of 5 before and after. That says my targets were easy, not that FitFindr is finished. What is left, and what I would do:
 
+- **Criterion 1 is still loose.** It only asks for a query that matches at least one listing. After the improvement, a match must cover more than half the keywords, but it is a majority, not all: `cropped leather jacket under $80` still selects `Denim Jacket - Light Wash, Cropped` (two of three words) ahead of the leather bomber. I would tighten the criterion to check that the selected item matches every keyword that names a kind of item, and add a probe for it. I stopped because the unit allows one improvement and tightening a target after seeing results is not a revision, so `criteria.md` is unchanged.
+- **A 503 from the model is not retried.** The live model returned `503 UNAVAILABLE` on three runs (two probe runs and one try in the after run). `generate.py` only retries rate limits (429) and raises `ModelUnavailable` on anything else, so a short outage ends the run with the "busy" message. I would retry a 503 once or twice after a few seconds. I stopped because `generate.py` is the starter's adapter and the unit's only code changes were the MCP move and one improvement.
+- **Fewer results.** The new rule returns 5 listings for `vintage graphic tee under $30` (was 10) and 1 for `denim jacket under $50` (was 7), so a loosely worded query is more likely to come back empty. The empty-search message helps, but I did not measure how often real queries now fail.
+- **Ties and exact words.** When listings tie, the first in the data file wins, so `vintage graphic tee under $30` picks `Y2K Baby Tee` over `Graphic Tee - 2003 Tour Bootleg Style`, which also matches all three words. Matching is exact-word, so `tees` does not match `tee`. I would weight title matches and stem plurals. I did not touch these because no criterion measures them.
+- **Criteria 3 and 5 cannot vary.** They never call the model, so five tries return the same answer. I would score them once on several different queries instead of five times on one.
+- **Fit cards share an opener.** Eight of the ten fit cards in the two criterion 4 runs start with "Scored this ..." (the other two start "Found this ..."). Criterion 4 does not check openers, so it passed. I would add an opener rule to the criterion.
+- **MCP.** Only `search_listings` moved. Each call starts `mcp_server.py` again, so a search is slower than a direct call, and the agent has no handler for an `MCPError` if the server will not start (it would show the error text from `mcp_client.py`). I did not move a second tool or add that handler.
+- **Cosmetic.** `app.py` prints `$18.0` in the "Found:" line while the fit card says `$18`. I left it because it is not part of this unit.
+
+**The MCP move, in one line:** `search_listings` is registered in `mcp_server.py` and `agent.py` calls it through `mcp_client.call_tool`; on three test queries the MCP result was identical to the direct call, and the only difference I saw was speed (see Loop Trace).
 
 <!-- ═════════════════════════════════════════════════════════════════════
 
