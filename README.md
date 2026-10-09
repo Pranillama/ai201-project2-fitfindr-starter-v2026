@@ -61,12 +61,12 @@ A user asks for a thrift find in plain words, like `python app.py ask 'vintage g
 
 ### `search_listings`
 
-- **What it does:** Filters the 40 listings in `data/listings.json` (loaded with `utils/data_loader.load_listings`) by price and size, then ranks what is left by how many description keywords appear in each listing's `title`, `description`, `style_tags`, `category`, and `colors`.
+- **What it does:** Filters the 40 listings in `data/listings.json` (loaded with `utils/data_loader.load_listings`) by price and size, then ranks what is left by how many description keywords appear in each listing's `title`, `description`, `style_tags`, `category`, and `colors`, and keeps only listings that match more than half of the distinct keywords (`len(keywords) // 2 + 1`: 1 of 1, 2 of 2, 2 of 3, 3 of 4 or 5).
 - **Inputs:**
   - `description` (str): keywords such as `"vintage graphic tee"`. Matched case-insensitively, with filler words (`under`, `size`, `in`, `a`, `the`, ...) dropped.
   - `size` (str or None): `None` skips size filtering. Otherwise the asked size and the listing's `size` are each split into pieces on spaces, `/`, and parentheses, and the listing matches when every piece of the asked size appears among the listing's pieces, case-insensitively. So `"M"` matches `M`, `S/M`, `M/L`; `"S"` does not match `US 9`; `"8"` and `"US 8"` match `US 8` but not `US 8.5`; `"W30"` matches `W30 L30`. Any listing whose size starts with `One Size` matches every size.
   - `max_price` (float or None): `None` skips price filtering. Otherwise keeps listings with `price <= max_price`.
-- **Returns:** A `list[dict]` of at most `config.SEARCH_RESULT_LIMIT` (10) listing dicts, highest keyword score first, ties kept in data-file order. Each dict is the full listing, unchanged: `id`, `title`, `description`, `category`, `style_tags` (list), `size`, `condition`, `price` (float), `colors` (list), `brand` (str or None), `platform`. Listings with a keyword score of zero are dropped.
+- **Returns:** A `list[dict]` of at most `config.SEARCH_RESULT_LIMIT` (10) listing dicts, highest keyword score first, ties kept in data-file order. Each dict is the full listing, unchanged: `id`, `title`, `description`, `category`, `style_tags` (list), `size`, `condition`, `price` (float), `colors` (list), `brand` (str or None), `platform`. Listings that match half the keywords or fewer are dropped (so a single shared word cannot carry a multi-word query).
 - **When it has nothing:** Returns an empty list `[]`. Never `None`, never raises.
 
 ### `suggest_outfit`
@@ -423,26 +423,103 @@ The empty run is two steps and stops at the branch; the happy run is four. Step 
 
      `python run_eval.py --label after` -->
 
-**What I changed:**
+**What I changed:** One change, in `tools.py::search_listings`. Before, a listing was kept if it matched at least one description keyword. Now it is kept only if it matches more than half of the distinct keywords (`needed = len(keywords) // 2 + 1`, so 1 of 1, 2 of 2, 2 of 3, 3 of 4 or 5). Nothing else in the loop or the other two tools changed. The Tool Inventory above, the docstring in `tools.py` and the tool description in `mcp_server.py` were updated to say the same thing. The only other code change in this unit is the MCP move and the failure handlers from Milestone 2 (plus the 503 message wording, commit `22567f9`).
 
-**Which failure it was meant to fix:**
+**Which failure it was meant to fix:** The diagnosis in Verdicts and Diagnoses: `search_listings` (a tool) passed any listing with a score above zero, so one shared word carried a multi-word query. `leather bomber under $20` returned `Leather Belt - Brown, Braided` ($12) because of `leather`, and the loop then styled the belt and wrote a fit card for it. The change should make the agent stop at the search with a message instead of producing a fit card for the wrong item.
 
 ### Run Log — After
 
+`python run_eval.py --label after` wrote `results/run_2026-10-08_1922_after.md`: the same six scenarios as the before run, five tries each, caching off. Scored the same way as before (criteria 1, 2 and 4 from that file with the `criteria.md` rules; criteria 3 and 5 by re-running the capture command from Run Log - Before against the changed search).
+
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. A matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. An impossible query stops before the second tool | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. The selected item reaches the outfit tool unchanged | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. The fit card is short and includes the listing facts | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. The search respects my budget | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
-**Did it help, and how do I know:**
+Before and after, side by side: all five rows are 5 of 5 in both logs. Two details from the after run. First, in the "search respects the budget" scenario, try 4 stopped at `create_fit_card` because the live model returned 503 (the new "busy or temporarily down" message appeared as written, and `fit_card` was `None`). Criterion 5 is about the search, which had already returned five in-budget results in that try, so it is scored PASS from the capture command, not from that scenario's fit card. Second, the capture output after the change:
 
-<!-- If it made things worse, say that. Honestly reported, that earns full
-     credit and is more interesting than one that worked. -->
+```
+CRITERION 3: query 'denim jacket under $50'
+  try 1: PASS  calls_to_suggest_outfit=1  id search_results[0]=lst_007 selected_item=lst_007 received=lst_007  all fields equal=True
+  try 2: PASS  calls_to_suggest_outfit=1  id search_results[0]=lst_007 selected_item=lst_007 received=lst_007  all fields equal=True
+  try 3: PASS  calls_to_suggest_outfit=1  id search_results[0]=lst_007 selected_item=lst_007 received=lst_007  all fields equal=True
+  try 4: PASS  calls_to_suggest_outfit=1  id search_results[0]=lst_007 selected_item=lst_007 received=lst_007  all fields equal=True
+  try 5: PASS  calls_to_suggest_outfit=1  id search_results[0]=lst_007 selected_item=lst_007 received=lst_007  all fields equal=True
+CRITERION 5: query 'vintage graphic tee under $30'
+  try 1: PASS  parsed max_price=30.0  results=5  max result price=26.0  selected price=18.0
+  try 2: PASS  parsed max_price=30.0  results=5  max result price=26.0  selected price=18.0
+  try 3: PASS  parsed max_price=30.0  results=5  max result price=26.0  selected price=18.0
+  try 4: PASS  parsed max_price=30.0  results=5  max result price=26.0  selected price=18.0
+  try 5: PASS  parsed max_price=30.0  results=5  max result price=26.0  selected price=18.0
+```
 
+The change moved the search results: `vintage graphic tee under $30` now returns 5 listings (highest price $26) instead of 10 (highest $30), and `denim jacket under $50` returns 1 instead of 7. The selected item did not change for either query.
 
+**The probe.** The five criteria were already at 5 of 5, so they cannot show an improvement. To measure this change I ran the two queries that exposed the weakness through the same runner, `run_eval.py::run_once`, five tries each with caching off, before and after the change. The probe command (run from the repo root with the virtual environment active, for example `python - < probe.py`):
+
+```python
+import config
+config.CACHE_ENABLED = False          # five real model answers, as in run_eval.py
+from run_eval import run_once
+
+PROBES = ["leather bomber under $20", "oversized wool coat under $90"]
+for query in PROBES:
+    print(f"PROBE: {query!r}")
+    for n in range(1, 6):
+        rec = run_once({"query": query, "wardrobe": "example"})
+        s = rec["session"] or {}
+        item = s.get("selected_item")
+        if rec["crashed"]:
+            outcome = "CRASHED " + rec["crashed"][:60]
+        elif s.get("error") and item is None:
+            outcome = "stopped at search: " + s["error"][:70] + "..."
+        elif s.get("error"):
+            outcome = f"stopped after search ({item['title']}): model unavailable"
+        else:
+            outcome = f"fit card for: {item['title']} (${item['price']})"
+        print(f"  try {n}: results={len(s.get('search_results') or [])}  {outcome}")
+```
+
+Before the change (old `search_listings`):
+
+```
+PROBE: 'leather bomber under $20'
+  try 1: results=1  fit card for: Leather Belt — Brown, Braided ($12.0)
+  try 2: results=1  fit card for: Leather Belt — Brown, Braided ($12.0)
+  try 3: results=1  fit card for: Leather Belt — Brown, Braided ($12.0)
+  try 4: results=1  fit card for: Leather Belt — Brown, Braided ($12.0)
+  try 5: results=1  fit card for: Leather Belt — Brown, Braided ($12.0)
+PROBE: 'oversized wool coat under $90'
+  try 1: results=5  fit card for: Oversized Flannel Shirt — Plaid Red/Black ($22.0)
+  try 2: results=5  fit card for: Oversized Flannel Shirt — Plaid Red/Black ($22.0)
+  try 3: results=5  fit card for: Oversized Flannel Shirt — Plaid Red/Black ($22.0)
+  try 4: results=5  fit card for: Oversized Flannel Shirt — Plaid Red/Black ($22.0)
+  try 5: results=5  fit card for: Oversized Flannel Shirt — Plaid Red/Black ($22.0)
+```
+
+After the change:
+
+```
+PROBE: 'leather bomber under $20'
+  try 1: results=0  stopped at search: Nothing matched 'leather bomber' at $20 or less. Without the price lim...
+  try 2: results=0  stopped at search: Nothing matched 'leather bomber' at $20 or less. Without the price lim...
+  try 3: results=0  stopped at search: Nothing matched 'leather bomber' at $20 or less. Without the price lim...
+  try 4: results=0  stopped at search: Nothing matched 'leather bomber' at $20 or less. Without the price lim...
+  try 5: results=0  stopped at search: Nothing matched 'leather bomber' at $20 or less. Without the price lim...
+PROBE: 'oversized wool coat under $90'
+  try 1: results=0  stopped at search: Nothing matched 'oversized wool coat' at $90 or less. No listing match...
+  try 2: results=0  stopped at search: Nothing matched 'oversized wool coat' at $90 or less. No listing match...
+  try 3: results=0  stopped at search: Nothing matched 'oversized wool coat' at $90 or less. No listing match...
+  try 4: results=0  stopped at search: Nothing matched 'oversized wool coat' at $90 or less. No listing match...
+  try 5: results=0  stopped at search: Nothing matched 'oversized wool coat' at $90 or less. No listing match...
+```
+
+The empty-search messages after the change, in full: "Nothing matched 'leather bomber' at $20 or less. Without the price limit there are 1 matches, the cheapest at $75. Try raising your budget." and "Nothing matched 'oversized wool coat' at $90 or less. No listing matches those words even without a size or price limit. Try naming the kind of item (tee, jacket, jeans, sneakers) or a style (vintage, y2k, streetwear)."
+
+**Did it help, and how do I know:** Yes, on the failure I diagnosed, and it did not move any of my five criteria. Before: on both probe queries, all 5 of 5 tries (10 of 10 runs) ended with a fit card for the wrong item (a leather belt for a bomber, a flannel shirt for a wool coat), and criterion 1 as written would have scored those PASS. After: 10 of 10 runs stop at the search with a message that says what to change, no model call is made, and `fit_card` stays `None`. The five criteria stayed at 5 of 5 because they were already at the ceiling, so the probe, not the table, is the evidence. Costs I can see: queries return fewer results (5 instead of 10 for the tee query, 1 instead of 7 for the denim jacket query), so a loosely worded query is more likely to come back empty. The rule is also a majority, not all keywords: `cropped leather jacket under $80` still matches the cropped denim jacket on two of its three words.
 
 ---
 

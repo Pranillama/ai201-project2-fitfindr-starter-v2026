@@ -78,9 +78,10 @@ def search_listings(
     size, and optional price ceiling. `description` is plain keywords such as
     "vintage graphic tee"; `size` is a clothing size such as "M", "US 8" or
     "W30" (omit to skip size filtering); `max_price` is the highest price in
-    dollars, inclusive (omit to skip price filtering). Returns up to 10 full
-    listing records, best keyword match first, and returns an empty list []
-    when nothing matches.
+    dollars, inclusive (omit to skip price filtering). A listing is returned only
+    if it matches more than half of the keywords. Returns up to 10 full listing
+    records, best keyword match first, and returns an empty list [] when nothing
+    matches.
     """
     return _search_listings_impl(description, size, max_price)
 

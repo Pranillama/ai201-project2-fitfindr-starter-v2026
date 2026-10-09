@@ -95,10 +95,13 @@ def search_listings(
         At most config.SEARCH_RESULT_LIMIT full listing dicts, highest score
         first, ties in data-file order. The score is how many distinct
         description keywords appear in the listing's title, description,
-        category, style_tags, and colors. Zero-score listings are dropped.
+        category, style_tags, and colors. A listing is kept only if it matches
+        more than half of the keywords (1 of 1, 2 of 2 or 3, 2 of 3, 3 of 4 or
+        5), so a single shared word can't carry a multi-word query.
         Returns [] when nothing matches. Never None, never raises.
     """
     keywords = {word for word in _words(description) if word not in STOPWORDS}
+    needed = len(keywords) // 2 + 1
 
     scored = []
     for listing in load_listings():
@@ -107,7 +110,7 @@ def search_listings(
         if size and not _size_matches(size, listing["size"]):
             continue
         score = len(keywords & _searchable_words(listing))
-        if score > 0:
+        if score > 0 and score >= needed:
             scored.append((score, listing))
 
     # list.sort is stable, so equal scores keep data-file order.
