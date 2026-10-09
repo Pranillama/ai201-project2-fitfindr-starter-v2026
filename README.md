@@ -340,15 +340,24 @@ CRITERION 5: query 'vintage graphic tee under $30'
 
 | # | Criterion | Target | Verdict | How I decided |
 |---|---|---|---|---|
-| 1 |  |  |  |  |
-| 2 |  |  |  |  |
-| 3 |  |  |  |  |
-| 4 |  |  |  |  |
-| 5 |  |  |  |  |
+| 1 | A matching query completes all three tools | 4 of 5 | MET (5/5) | Counted tries whose trace had all four steps (`parse_query`, `search_listings (via MCP)`, `suggest_outfit`, `create_fit_card`) and a non-empty fit card. Five of five did. |
+| 2 | An impossible query stops before the second tool | 5 of 5 | MET (5/5) | All five traces end at step 2 with `[] (empty)`, `suggest_outfit` is never called, `fit_card` stays `None`, and the message names what to change ("Try naming the kind of item ... or a style"). |
+| 3 | The selected item reaches the outfit tool unchanged | 5 of 5 | MET (5/5) | The capture command compared `search_results[0]`, `selected_item` and the `new_item` that `suggest_outfit` received. Same `id` (`lst_007`) and equal for every field in all five tries. |
+| 4 | The fit card is short and includes the listing facts | 4 of 5 | MET (5/5) | Applied the `criteria.md` counting rules to each card: 2 to 4 sentences, full title once, `depop` once, one dollar amount equal to `$18`. All five passed (sentence counts 3, 3, 2, 3, 3). |
+| 5 | The search respects my budget | 5 of 5 | MET (5/5) | The capture command checked `parsed["max_price"]` is 30, there is at least one result, and every result and the selected item cost $30 or less. Ten results each try, highest price $30. |
 
 **Diagnoses**
 
+Nothing was missed: all five criteria are MET at 5 of 5, so there is no miss to trace to a tool, the branch, the session or the model's output. I am not revising any criterion. Each one was measurable as written, and the fit card rules in `criteria.md` scored cleanly.
 
+Were my targets too low? Partly, yes:
+
+- **Criterion 1 is the one I would tighten.** It only asks for "a query that matches at least one listing", and a search that matches one keyword counts as a match. `leather bomber under $20` shows it: the only bomber costs $75, but the search returns `lst_014 Leather Belt - Brown, Braided` ($12) because `leather` alone gives it a score above zero (`search_listings` keeps anything with a keyword score greater than zero). A run like that would complete all three tools and return a fit card, so it would pass criterion 1 while giving the user the wrong item. That is a tool problem (`search_listings`: the score cutoff), and my criteria had no way to catch it because I only tested friendly queries.
+- **Criteria 3 and 5 cannot vary.** They do not call a model, so five tries return the same result by design. Five of five on them says the code is consistent, not that five tries added information.
+- **Criterion 4 and the model.** The fit card varies between tries, but all five opened with "Scored ...". My criterion does not mention openers, so it did not notice.
+- **Outside the test.** After the 50-call run, the live model returned `503 UNAVAILABLE` on two separate queries. None of the 50 test calls hit one, so criterion 1's 4 of 5 was never tested against a model outage.
+
+The pattern is a single weak spot, not several: the search cutoff in `search_listings` (a one-keyword match passes) and a test set of easy queries that never exercised it.
 
 ---
 
