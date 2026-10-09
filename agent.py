@@ -256,9 +256,14 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         # already worked, so say so.
         item = session["selected_item"]
         found = f" It did find {item['title']}, so your search is fine." if item else ""
+        reason = str(exc)
+        if reason.startswith("Couldn't reach the model:"):
+            # generate._explain's catch-all text, which carries the provider's
+            # raw error (e.g. a 503 JSON body). Don't show that to a user.
+            reason = "The model service is busy or temporarily down. Wait a minute and try again."
         session["error"] = (
             f"FitFindr couldn't reach the model, so it couldn't style the item "
-            f"or write a fit card.{found} {exc}"
+            f"or write a fit card.{found} {reason}"
         )
         trace.step("model unavailable", note="stopping, no fit card")
 
